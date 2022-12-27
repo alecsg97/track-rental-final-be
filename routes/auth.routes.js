@@ -1,91 +1,83 @@
 const express = require('express');
 const router = express.Router();
-const User = require("../models/User.model")
+const User = require('../models/User.model');
 const bcryptjs = require('bcryptjs');
 
-//================SIGN-UP
 
-router.post('/signup', (req, res, next)=>{
+
+router.post('/signup', (req,res,next) => {
+    console.log({body: req.body})
     const saltRounds = 12;
+    
     bcryptjs
     .genSalt(saltRounds)
     .then(salt => bcryptjs.hash(req.body.password, salt))
     .then(hashedPassword => {
-      console.log(`Password hash: ${hashedPassword}`);
-      User.create({
+        console.log({hashedPassword});
+    User.create({
         username: req.body.username,
         password: hashedPassword,
+        email: req.body.email,
     })
-      res.redirect('/')
+    .then(() => {
+        res.json({message: "successfully signed up new account"})
     })
-    .catch(error => next(error));
-});
-
-//=======================LOGIN
-router.post('/login', (req, res, next) => {
-  if (req.body.username === '' || req.body.password === '') {
-    //line 36 new
-    req.flash('error', 'Please make sure to fill in both fields');
-    res.redirect('/login');
-    return;
-  }
- 
-  User.findOne({ username: req.body.username })
-    .then(resultFromDB => {
-      if (!resultFromDB) {
-        //line 45 new 
-        req.flash('error', 'could not find that username')
-        res.redirect('/login');
-        return;
-      } else if (bcryptjs.compareSync(req.body.password, resultFromDB.password)) {
-        console.log("found user", resultFromDB);
-        req.session.currentlyLoggedIn = resultFromDB;
-        console.log(req.session);
-        // line 53 new
-        req.flash('success', 'Successfully Logged In as ' + resultFromDB.username);
-        res.redirect('/profile');
-        return;
-      } else {
-        //line 58 new
-        req.flash('error', 'this username/password combination could not be authenticated. please try again');
-        res.redirect('/login');
-      }
-    })
-    .catch(error => console.log(error));
-});
-
-
-//================ CHANGE PASSWORD
-
-router.post('/new-password', (req, res, next)=>{
-
-  if(req.body.newpass !== req.body.confirmnewpass){
-    res.redirect("/profile")
-    // need to show an error message here but cant yet
-  }
-
-  User.findById(req.session.currentlyLoggedIn._id)
-  .then(resultFromDB => {
-     if (bcryptjs.compareSync(req.body.oldpass, resultFromDB.password)) {
-      const saltRounds = 12;
-      bcryptjs
-      .genSalt(saltRounds)
-      .then(salt => bcryptjs.hash(req.body.newpass, salt))
-      .then(hashedPassword => {
-        
-        User.findByIdAndUpdate(req.session.currentlyLoggedIn._id, {
-          password: hashedPassword
-        })
-        .then(()=>{
-          res.redirect('/profile');
-
-        })
-      })
-        .catch((err)=>{
-          next(err);
-        })
-  }
+    .catch((err) => {
+        res.json({err, success: false});
+    });
+    });
 })
+
+router.post('/login', (req,res,next) => {
+    if (req.body.username === '' || req.body.password === '') {
+        res.json({error: "fields cannot be left blank"})
+        return;
+    }
+
+    User.findOne({ username: req.body.username })
+    .then(resultFromDB => {
+        if (!resultFromDB) {
+        res.json({error: "username/password combination is not correct"});
+            return;
+        } else if (bcryptjs.compareSync(req.body.password, resultFromDB.password)) {
+            req.session.currentlyLoggedIn = resultFromDB;
+            res.json({message: "Successfully logged in"});
+            return;
+        } else {
+            res.json({error: "username/password combination is not correct"});
+        }
+        })
+        .catch(error => console.log(error));
+})
+
+function serializeTheUserObject(userObj){
+    let result = {};
+    if(userObj.username) result.username = userObj.username;
+    if(userObj.email) result.email = userObj.email;
+    return result;
+  }
+  
+  
+  router.get('/serializeuser', (req, res, next)=>{
+    console.log(req.session);
+    console.log(req.session.currentlyLoggedIn);
+  
+    if(!req.session.currentlyLoggedIn) res.json(null);
+  
+    User.findById(req.session.currentlyLoggedIn._id)
+    .then((theUser)=>{
+      res.json(serializeTheUserObject(theUser))
+    })
+    .catch((err)=>{
+      console.log(err)
+    })
+  })
+
+router.post('/logout', (req, res, next)=>{
+    req.session.destroy(err => {
+        if (err) console.log(err);
+        res.json({message: "successfully logged out"});
+    });
 })
 
 module.exports = router;
